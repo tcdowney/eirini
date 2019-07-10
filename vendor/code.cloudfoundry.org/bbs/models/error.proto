@@ -1,4 +1,4 @@
-syntax = "proto3";
+syntax = "proto2";
 
 package models;
 
@@ -47,6 +47,6 @@ message Error {
     Timeout = 31;
   }
 
-  Type type = 1 [(gogoproto.jsontag) = "type"];
-  string message = 2 [(gogoproto.jsontag) = "message"];
+  optional Type type = 1 [(gogoproto.nullable) = false];
+  optional string message = 2 [(gogoproto.nullable) = false];
 }

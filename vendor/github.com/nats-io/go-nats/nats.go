@@ -1,4 +1,4 @@
-// Copyright 2012-2019 The NATS Authors
+// Copyright 2012-2018 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -43,7 +43,7 @@ import (
 
 // Default Constants
 const (
-	Version                 = "1.7.2"
+	Version                 = "1.7.0"
 	DefaultURL              = "nats://localhost:4222"
 	DefaultPort             = 4222
 	DefaultMaxReconnect     = 60
@@ -97,7 +97,6 @@ var (
 	ErrInvalidMsg             = errors.New("nats: invalid message or message nil")
 	ErrInvalidArg             = errors.New("nats: invalid argument")
 	ErrInvalidContext         = errors.New("nats: invalid context")
-	ErrNoDeadlineContext      = errors.New("nats: context requires a deadline")
 	ErrNoEchoNotSupported     = errors.New("nats: no echo option not supported by this server")
 	ErrClientIDNotSupported   = errors.New("nats: client ID not supported by this server")
 	ErrUserButNoSigCB         = errors.New("nats: user callback defined without a signature handler")
@@ -634,7 +633,7 @@ func MaxReconnects(max int) Option {
 	}
 }
 
-// PingInterval is an Option to set the period for client ping commands.
+// PingInterval is an Option to set the period for client ping commands
 func PingInterval(t time.Duration) Option {
 	return func(o *Options) error {
 		o.PingInterval = t
@@ -642,16 +641,7 @@ func PingInterval(t time.Duration) Option {
 	}
 }
 
-// MaxPingsOutstanding is an Option to set the maximum number of ping requests
-// that can go un-answered by the server before closing the connection.
-func MaxPingsOutstanding(max int) Option {
-	return func(o *Options) error {
-		o.MaxPingsOut = max
-		return nil
-	}
-}
-
-// ReconnectBufSize sets the buffer size of messages kept while busy reconnecting.
+// ReconnectBufSize sets the buffer size of messages kept while busy reconnecting
 func ReconnectBufSize(size int) Option {
 	return func(o *Options) error {
 		o.ReconnectBufSize = size
@@ -803,15 +793,6 @@ func Nkey(pubKey string, sigCB SignatureHandler) Option {
 		if pubKey != "" && sigCB == nil {
 			return ErrNkeyButNoSigCB
 		}
-		return nil
-	}
-}
-
-// SyncQueueLen will set the maximum queue len for the internal
-// channel used for SubscribeSync().
-func SyncQueueLen(max int) Option {
-	return func(o *Options) error {
-		o.SubChanLen = max
 		return nil
 	}
 }
@@ -1028,7 +1009,6 @@ func (nc *Conn) pickServer() error {
 	if len(nc.srvPool) <= 0 {
 		return ErrNoServers
 	}
-
 	for _, s := range nc.srvPool {
 		if s != nil {
 			nc.current = s
@@ -1189,18 +1169,18 @@ func (nc *Conn) createConn() (err error) {
 	}
 
 	// We will auto-expand host names if they resolve to multiple IPs
-	hosts := map[string]struct{}{}
+	var hosts []string
 	u := nc.current.url
 
 	if net.ParseIP(u.Hostname()) == nil {
 		addrs, _ := net.LookupHost(u.Hostname())
 		for _, addr := range addrs {
-			hosts[net.JoinHostPort(addr, u.Port())] = struct{}{}
+			hosts = append(hosts, fmt.Sprintf("%s:%s", addr, u.Port()))
 		}
 	}
 	// Fall back to what we were given.
 	if len(hosts) == 0 {
-		hosts[u.Host] = struct{}{}
+		hosts = append(hosts, u.Host)
 	}
 
 	// CustomDialer takes precedence. If not set, use Opts.Dialer which
@@ -1214,7 +1194,7 @@ func (nc *Conn) createConn() (err error) {
 		dialer = &copyDialer
 	}
 
-	for host := range hosts {
+	for _, host := range hosts {
 		nc.conn, err = dialer.Dial("tcp", host)
 		if err == nil {
 			break
@@ -1239,13 +1219,15 @@ func (nc *Conn) createConn() (err error) {
 }
 
 // makeTLSConn will wrap an existing Conn using TLS
-func (nc *Conn) makeTLSConn() error {
-	// Allow the user to configure their own tls.Config structure.
+func (nc *Conn) makeTLSConn() {
+	// Allow the user to configure their own tls.Config structure,
+	// otherwise default to InsecureSkipVerify.
+	// TODO(dlc) - We should make the more secure version the default.
 	var tlsCopy *tls.Config
 	if nc.Opts.TLSConfig != nil {
 		tlsCopy = util.CloneTLSConfig(nc.Opts.TLSConfig)
 	} else {
-		tlsCopy = &tls.Config{}
+		tlsCopy = &tls.Config{InsecureSkipVerify: true}
 	}
 	// If its blank we will override it with the current host
 	if tlsCopy.ServerName == _EMPTY_ {
@@ -1258,11 +1240,8 @@ func (nc *Conn) makeTLSConn() error {
 	}
 	nc.conn = tls.Client(nc.conn, tlsCopy)
 	conn := nc.conn.(*tls.Conn)
-	if err := conn.Handshake(); err != nil {
-		return err
-	}
+	conn.Handshake()
 	nc.bw = nc.newBuffer()
-	return nil
 }
 
 // waitForExits will wait for all socket watcher Go routines to
@@ -1289,19 +1268,6 @@ func (nc *Conn) ConnectedUrl() string {
 		return _EMPTY_
 	}
 	return nc.current.url.String()
-}
-
-// ConnectedAddr returns the connected server's IP
-func (nc *Conn) ConnectedAddr() string {
-	if nc == nil {
-		return _EMPTY_
-	}
-	nc.mu.Lock()
-	defer nc.mu.Unlock()
-	if nc.status != CONNECTED {
-		return _EMPTY_
-	}
-	return nc.conn.RemoteAddr().String()
 }
 
 // Report the connected server's Id
@@ -1438,9 +1404,7 @@ func (nc *Conn) checkForSecure() error {
 
 	// Need to rewrap with bufio
 	if o.Secure {
-		if err := nc.makeTLSConn(); err != nil {
-			return err
-		}
+		nc.makeTLSConn()
 	}
 	return nil
 }
@@ -1556,7 +1520,7 @@ func (nc *Conn) connectProto() (string, error) {
 
 // normalizeErr removes the prefix -ERR, trim spaces and remove the quotes.
 func normalizeErr(line string) string {
-	s := strings.TrimSpace(strings.TrimPrefix(line, _ERR_OP_))
+	s := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, _ERR_OP_)))
 	s = strings.TrimLeft(strings.TrimRight(s, "'"), "'")
 	return s
 }
@@ -1980,6 +1944,7 @@ func (nc *Conn) readLoop() {
 			nc.processOpErr(err)
 			break
 		}
+
 		if err := nc.parse(b[:n]); err != nil {
 			nc.processOpErr(err)
 			break
@@ -2368,22 +2333,20 @@ func (nc *Conn) LastError() error {
 
 // processErr processes any error messages from the server and
 // sets the connection's lastError.
-func (nc *Conn) processErr(ie string) {
-	// Trim, remove quotes
-	ne := normalizeErr(ie)
-	// convert to lower case.
-	e := strings.ToLower(ne)
+func (nc *Conn) processErr(e string) {
+	// Trim, remove quotes, convert to lower case.
+	e = normalizeErr(e)
 
 	// FIXME(dlc) - process Slow Consumer signals special.
 	if e == STALE_CONNECTION {
 		nc.processOpErr(ErrStaleConnection)
 	} else if strings.HasPrefix(e, PERMISSIONS_ERR) {
-		nc.processPermissionsViolation(ne)
+		nc.processPermissionsViolation(e)
 	} else if strings.HasPrefix(e, AUTHORIZATION_ERR) {
-		nc.processAuthorizationViolation(ne)
+		nc.processAuthorizationViolation(e)
 	} else {
 		nc.mu.Lock()
-		nc.err = errors.New("nats: " + ne)
+		nc.err = errors.New("nats: " + e)
 		nc.mu.Unlock()
 		nc.Close()
 	}
@@ -2785,6 +2748,7 @@ func (nc *Conn) subscribe(subj, queue string, cb MsgHandler, ch chan *Msg) (*Sub
 	nc.mu.Lock()
 	// ok here, but defer is generally expensive
 	defer nc.mu.Unlock()
+	defer nc.kickFlusher()
 
 	// Check for some error conditions.
 	if nc.isClosed() {
@@ -2821,15 +2785,10 @@ func (nc *Conn) subscribe(subj, queue string, cb MsgHandler, ch chan *Msg) (*Sub
 	nc.subsMu.Unlock()
 
 	// We will send these for all subs when we reconnect
-	// so that we can suppress here if reconnecting.
+	// so that we can suppress here.
 	if !nc.isReconnecting() {
 		fmt.Fprintf(nc.bw, subProto, subj, queue, sub.sid)
-		// Kick flusher if needed.
-		if len(nc.fch) == 0 {
-			nc.kickFlusher()
-		}
 	}
-
 	return sub, nil
 }
 
@@ -3042,23 +3001,6 @@ func (s *Subscription) NextMsg(timeout time.Duration) (*Msg, error) {
 	var ok bool
 	var msg *Msg
 
-	// If something is available right away, let's optimize that case.
-	select {
-	case msg, ok = <-mch:
-		if !ok {
-			return nil, ErrConnectionClosed
-		}
-		if err := s.processNextMsgDelivered(msg); err != nil {
-			return nil, err
-		} else {
-			return msg, nil
-		}
-	default:
-	}
-
-	// If we are here a message was not immediately available, so lets loop
-	// with a timeout.
-
 	t := globalTimerPool.Get(timeout)
 	defer globalTimerPool.Put(t)
 
@@ -3067,7 +3009,8 @@ func (s *Subscription) NextMsg(timeout time.Duration) (*Msg, error) {
 		if !ok {
 			return nil, ErrConnectionClosed
 		}
-		if err := s.processNextMsgDelivered(msg); err != nil {
+		err := s.processNextMsgDelivered(msg)
+		if err != nil {
 			return nil, err
 		}
 	case <-t.C:
@@ -3393,6 +3336,7 @@ func (nc *Conn) resendSubscriptions() {
 			if s.delivered < s.max {
 				adjustedMax = s.max - s.delivered
 			}
+
 			// adjustedMax could be 0 here if the number of delivered msgs
 			// reached the max, if so unsubscribe.
 			if adjustedMax == 0 {

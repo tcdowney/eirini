@@ -21,6 +21,8 @@ func CreateEiriniClient(kubeConfigPath string) eiriniclientset.Interface {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	ExitWithError(err)
 
+	klog.InitFlags(nil)
+	flag.Set("v", "10")
 	client, err := eiriniclientset.NewForConfig(config)
 	ExitWithError(err)
 
@@ -44,8 +46,6 @@ func CreateKubeClient(kubeConfigPath string) kubernetes.Interface {
 	klog.SetOutput(os.Stdout)
 	klog.SetOutputBySeverity("Fatal", os.Stderr)
 	klog.SetOutputBySeverity("Info", os.Stderr)
-	klog.InitFlags(nil)
-	flag.Set("v", "10")
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	ExitWithError(err)
 

@@ -46,7 +46,7 @@ func runCrd(command *cobra.Command, _ []string) {
 
 	syncLogger := lager.NewLogger("sync-crd-logger")
 	syncLogger.RegisterSink(lager.NewWriterSink(os.Stdout, lager.DEBUG))
-	client := cmd.CreateEiriniClient("/Users/eirini/.kube/config")
+	client := cmd.CreateEiriniClient(cfg.Properties.KubeConfigPath)
 	registryIP := cfg.Properties.RegistryAddress
 	converter := bifrost.NewConverter(syncLogger, registryIP)
 
