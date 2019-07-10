@@ -28,6 +28,10 @@ var crdCmd = &cobra.Command{
 	Run:   runCrd,
 }
 
+func initCrd() {
+	crdCmd.Flags().StringP("config", "c", "", "Path to the Eirini config file")
+}
+
 func runCrd(command *cobra.Command, _ []string) {
 	path, err := command.Flags().GetString("config")
 	cmd.ExitWithError(err)
