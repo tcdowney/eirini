@@ -2,6 +2,7 @@ package bifrost
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 
@@ -20,6 +21,7 @@ func (b *Bifrost) Transfer(ctx context.Context, request cf.DesireLRPRequest) err
 	if err != nil {
 		return errors.Wrap(err, "failed to convert request")
 	}
+	fmt.Printf("\n Desired: %#v\n", desiredLRP)
 	return errors.Wrap(b.Desirer.Desire(&desiredLRP), "failed to desire")
 }
 

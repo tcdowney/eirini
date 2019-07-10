@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -41,6 +42,7 @@ func (a *App) Desire(w http.ResponseWriter, r *http.Request, ps httprouter.Param
 	}
 
 	request.LRP = buf.String()
+	fmt.Printf("%#v", request)
 
 	if err := a.bifrost.Transfer(r.Context(), request); err != nil {
 		loggerSession.Error("bifrost-failed", err)

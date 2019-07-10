@@ -33,6 +33,7 @@ require (
 	github.com/gophercloud/gophercloud v0.0.0-20190424031112-b9b92a825806 // indirect
 	github.com/hashicorp/consul/api v1.0.1 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
+	github.com/jinzhu/copier v0.0.0-20190625015134-976e0346caa8
 	github.com/json-iterator/go v1.1.6 // indirect
 	github.com/julienschmidt/httprouter v1.2.0
 	github.com/kr/pretty v0.1.0 // indirect

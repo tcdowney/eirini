@@ -16,6 +16,7 @@ func init() {
 	initConnect()
 	rootCmd.AddCommand(connectCmd)
 	rootCmd.AddCommand(simulatorCmd)
+	rootCmd.AddCommand(crdCmd)
 }
 
 func Execute() {

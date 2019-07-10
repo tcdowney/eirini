@@ -18,6 +18,7 @@ go get github.com/nats-io/gnatsd
 ## Basic Usage
 
 ```go
+import nats "github.com/nats-io/go-nats"
 
 // Connect to a server
 nc, _ := nats.Connect(nats.DefaultURL)
@@ -313,7 +314,7 @@ nc, err = nats.Connect(servers,
 	nats.DisconnectHandler(func(nc *nats.Conn) {
 		fmt.Printf("Got disconnected!\n")
 	}),
-	nats.ReconnectHandler(func(_ *nats.Conn) {
+	nats.ReconnectHandler(func(nc *nats.Conn) {
 		fmt.Printf("Got reconnected to %v!\n", nc.ConnectedUrl())
 	}),
 	nats.ClosedHandler(func(nc *nats.Conn) {
