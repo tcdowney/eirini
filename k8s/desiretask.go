@@ -70,7 +70,7 @@ func (d *TaskDesirer) toStagingJob(task *opi.StagingTask) *batch.Job {
 	}
 
 	secretsVolume := v1.Volume{
-		Name: eirini.CCCertsVolumeName,
+		Name: eirini.CertsVolumeName,
 		VolumeSource: v1.VolumeSource{
 			Secret: &v1.SecretVolumeSource{
 				SecretName: d.CertsSecretName,
@@ -79,9 +79,9 @@ func (d *TaskDesirer) toStagingJob(task *opi.StagingTask) *batch.Job {
 	}
 
 	secretsVolumeMount := v1.VolumeMount{
-		Name:      eirini.CCCertsVolumeName,
+		Name:      eirini.CertsVolumeName,
 		ReadOnly:  true,
-		MountPath: eirini.CCCertsMountPath,
+		MountPath: eirini.CertsMountPath,
 	}
 
 	outputVolume, outputVolumeMount := getVolume(eirini.RecipeOutputName, eirini.RecipeOutputLocation)
