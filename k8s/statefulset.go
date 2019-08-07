@@ -280,15 +280,9 @@ func (m *StatefulSetDesirer) toStatefulSet(lrp *opi.LRP) *appsv1.StatefulSet {
 	livenessProbe := m.LivenessProbeCreator(lrp)
 	readinessProbe := m.ReadinessProbeCreator(lrp)
 
-	memory, err := resource.ParseQuantity(fmt.Sprintf("%dM", lrp.MemoryMB))
-	if err != nil {
-		panic(err)
-	}
-
-	cpu, err := resource.ParseQuantity(fmt.Sprintf("%dm", lrp.CPUWeight*10))
-	if err != nil {
-		panic(err)
-	}
+	memory := *resource.NewScaledQuantity(lrp.MemoryMB, resource.Mega)
+	cpu := *resource.NewScaledQuantity(int64(lrp.CPUWeight*10), resource.Milli)
+	ephemeralStorage := *resource.NewScaledQuantity(lrp.DiskMB, resource.Mega)
 
 	volumes, volumeMounts := getVolumeSpecs(lrp.VolumeMounts)
 	automountServiceAccountToken := false
@@ -334,7 +328,8 @@ func (m *StatefulSetDesirer) toStatefulSet(lrp *opi.LRP) *appsv1.StatefulSet {
 							},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
-									corev1.ResourceMemory: memory,
+									corev1.ResourceMemory:           memory,
+									corev1.ResourceEphemeralStorage: ephemeralStorage,
 								},
 								Requests: corev1.ResourceList{
 									corev1.ResourceMemory: memory,

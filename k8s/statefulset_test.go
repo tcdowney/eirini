@@ -689,14 +689,10 @@ func toStatefulSet(lrp *opi.LRP) *appsv1.StatefulSet {
 	vols, volumeMounts := createVolumeSpecs(lrp.VolumeMounts)
 
 	targetInstances := int32(lrp.TargetInstances)
-	memory, err := resource.ParseQuantity(fmt.Sprintf("%dM", lrp.MemoryMB))
-	if err != nil {
-		panic(err)
-	}
-	cpu, err := resource.ParseQuantity(fmt.Sprintf("%dm", lrp.CPUWeight))
-	if err != nil {
-		panic(err)
-	}
+
+	memory := *resource.NewScaledQuantity(lrp.MemoryMB, resource.Mega)
+	cpu := *resource.NewScaledQuantity(int64(lrp.CPUWeight*10), resource.Milli)
+	ephemeralStorage := *resource.NewScaledQuantity(lrp.DiskMB, resource.Mega)
 
 	automountServiceAccountToken := false
 
@@ -727,7 +723,8 @@ func toStatefulSet(lrp *opi.LRP) *appsv1.StatefulSet {
 							ReadinessProbe: &corev1.Probe{},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
-									corev1.ResourceMemory: memory,
+									corev1.ResourceMemory:           memory,
+									corev1.ResourceEphemeralStorage: ephemeralStorage,
 								},
 								Requests: corev1.ResourceList{
 									corev1.ResourceMemory: memory,
