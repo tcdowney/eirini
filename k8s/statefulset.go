@@ -65,6 +65,7 @@ func (m *StatefulSetDesirer) List() ([]*opi.LRP, error) {
 }
 
 func (m *StatefulSetDesirer) Stop(identifier opi.LRPIdentifier) error {
+	// delete the associated jobs for the guid
 	selector := fmt.Sprintf("guid=%s", identifier.GUID)
 	options := meta.ListOptions{LabelSelector: selector}
 	jobs, err := m.Client.BatchV1().Jobs(m.Namespace).List(options)
@@ -363,6 +364,13 @@ func (m *StatefulSetDesirer) toStatefulSet(lrp *opi.LRP) *appsv1.StatefulSet {
 							LivenessProbe:  livenessProbe,
 							ReadinessProbe: readinessProbe,
 							VolumeMounts:   volumeMounts,
+							Lifecycle: &corev1.Lifecycle{
+								PreStop: &corev1.Handler{
+									Exec: &corev1.ExecAction{
+										Command: []string{"sleep", "1"},
+									},
+								},
+							},
 						},
 					},
 					Volumes: volumes,
