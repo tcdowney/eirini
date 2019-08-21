@@ -44,6 +44,7 @@ var _ = Describe("Convert CC DesiredApp into an opi LRP", func() {
 			LastUpdated:  "23534635232.3",
 			NumInstances: 3,
 			MemoryMB:     456,
+			DiskMB:       1024,
 			CPUWeight:    50,
 			Environment: map[string]string{
 				"VCAP_APPLICATION": `{"application_name":"bumblebee", "space_name":"transformers", "application_id":"b194809b-88c0-49af-b8aa-69da097fc360", "version": "something-something-uuid", "application_uris":["bumblebee.example.com", "transformers.example.com"]}`,
@@ -72,7 +73,7 @@ var _ = Describe("Convert CC DesiredApp into an opi LRP", func() {
 
 	JustBeforeEach(func() {
 		regIP := "eirini-registry.service.cf.internal"
-		converter = bifrost.NewConverter(logger, regIP, 2058)
+		converter = bifrost.NewConverter(logger, regIP)
 		lrp, err = converter.Convert(desireLRPRequest)
 	})
 
@@ -103,12 +104,8 @@ var _ = Describe("Convert CC DesiredApp into an opi LRP", func() {
 				Expect(lrp.CPUWeight).To(Equal(uint8(50)))
 			})
 
-			It("should set the lrp memory", func() {
-				Expect(lrp.MemoryMB).To(Equal(int64(456)))
-			})
-
 			It("should set the lrp disk", func() {
-				Expect(lrp.DiskMB).To(Equal(int64(2058)))
+				Expect(lrp.DiskMB).To(Equal(int64(1024)))
 			})
 
 			It("should store the VCAP env variable as metadata", func() {

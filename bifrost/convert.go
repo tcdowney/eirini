@@ -11,16 +11,14 @@ import (
 )
 
 type DropletToImageConverter struct {
-	logger      lager.Logger
-	registryIP  string
-	diskLimitMB int64
+	logger     lager.Logger
+	registryIP string
 }
 
-func NewConverter(logger lager.Logger, registryIP string, diskLimitMB int64) *DropletToImageConverter {
+func NewConverter(logger lager.Logger, registryIP string) *DropletToImageConverter {
 	return &DropletToImageConverter{
-		logger:      logger,
-		registryIP:  registryIP,
-		diskLimitMB: diskLimitMB,
+		logger:     logger,
+		registryIP: registryIP,
 	}
 }
 
@@ -104,7 +102,7 @@ func (c *DropletToImageConverter) Convert(request cf.DesireLRPRequest) (opi.LRP,
 			cf.LastUpdated: request.LastUpdated,
 		},
 		MemoryMB:     request.MemoryMB,
-		DiskMB:       c.diskLimitMB,
+		DiskMB:       request.DiskMB,
 		CPUWeight:    request.CPUWeight,
 		VolumeMounts: volumeMounts,
 		LRP:          request.LRP,

@@ -43,6 +43,7 @@ type DesireLRPRequest struct {
 	HealthCheckHTTPEndpoint string                      `json:"health_check_http_endpoint"`
 	HealthCheckTimeoutMs    uint                        `json:"health_check_timeout_ms"`
 	MemoryMB                int64                       `json:"memory_mb"`
+	DiskMB                  int64                       `json:"disk_mb"`
 	CPUWeight               uint8                       `json:"cpu_weight"`
 	VolumeMounts            []VolumeMount               `json:"volume_mounts"`
 	Lifecycle               Lifecycle                   `json:"lifecycle"`
