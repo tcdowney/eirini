@@ -5,28 +5,37 @@ import (
 )
 
 const (
-	cpuUnit    = "percentage"
-	memoryUnit = "bytes"
-	diskUnit   = "bytes"
+	CPUUnit    = "percentage"
+	MemoryUnit = "bytes"
+	DiskUnit   = "bytes"
+
+	CPU         = "cpu"
+	Memory      = "memory"
+	Disk        = "disk"
+	MemoryQuota = "memory_quota"
+	DiskQuota   = "disk_quota"
 )
 
-type LoggregatorForwarder struct {
-	client *loggregator.IngressClient
+//go:generate counterfeiter . LoggregatorClient
+type LoggregatorClient interface {
+	EmitGauge(...loggregator.EmitGaugeOption)
 }
 
-func NewLoggregatorForwarder(client *loggregator.IngressClient) *LoggregatorForwarder {
+type LoggregatorForwarder struct {
+	client LoggregatorClient
+}
+
+func NewLoggregatorForwarder(client LoggregatorClient) *LoggregatorForwarder {
 	return &LoggregatorForwarder{
 		client: client,
 	}
 }
 
 func (l *LoggregatorForwarder) Forward(msg Message) {
-	l.client.EmitGauge(
-		loggregator.WithGaugeSourceInfo(msg.AppID, msg.IndexID),
-		loggregator.WithGaugeValue("cpu", msg.CPU, cpuUnit),
-		loggregator.WithGaugeValue("memory", msg.Memory, memoryUnit),
-		loggregator.WithGaugeValue("disk", msg.Disk, diskUnit),
-		loggregator.WithGaugeValue("memory_quota", msg.MemoryQuota, memoryUnit),
-		loggregator.WithGaugeValue("disk_quota", msg.DiskQuota, diskUnit),
-	)
+	gaugeOptions := []loggregator.EmitGaugeOption{loggregator.WithGaugeSourceInfo(msg.AppID, msg.IndexID)}
+	for metricName, metricValue := range msg.Metrics {
+		gaugeOptions = append(gaugeOptions, loggregator.WithGaugeValue(metricName, metricValue.Magnitude, metricValue.Unit))
+	}
+
+	l.client.EmitGauge(gaugeOptions...)
 }

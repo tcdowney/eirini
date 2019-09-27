@@ -26,31 +26,40 @@ var _ = Describe("emitter", func() {
 		emitter = NewEmitter(work, scheduler, forwarder)
 	})
 
-	Context("when metrics are send to the channel", func() {
+	Context("when metrics are sent to the channel", func() {
+
+		var (
+			message1 Message
+			message2 Message
+		)
 
 		BeforeEach(func() {
 			emitter.Start()
 
-			work <- []Message{
-				{
-					AppID:       "appid",
-					IndexID:     "0",
-					CPU:         123.4,
-					Memory:      123.4,
-					MemoryQuota: 1000.4,
-					Disk:        10.1,
-					DiskQuota:   250.5,
-				},
-				{
-					AppID:       "appid",
-					IndexID:     "1",
-					CPU:         234.1,
-					Memory:      675.4,
-					MemoryQuota: 1000.4,
-					Disk:        10.1,
-					DiskQuota:   250.5,
+			message1 = Message{
+				AppID:   "appid",
+				IndexID: "0",
+				Metrics: map[string]Measurement{
+					CPU:         Measurement{Magnitude: 123.4},
+					Memory:      Measurement{Magnitude: 123.4},
+					MemoryQuota: Measurement{Magnitude: 1000.4},
+					Disk:        Measurement{Magnitude: 10.1},
+					DiskQuota:   Measurement{Magnitude: 250.5},
 				},
 			}
+			message2 = Message{
+				AppID:   "appid",
+				IndexID: "1",
+				Metrics: map[string]Measurement{
+					CPU:         Measurement{Magnitude: 234.1},
+					Memory:      Measurement{Magnitude: 675.4},
+					MemoryQuota: Measurement{Magnitude: 1000.4},
+					Disk:        Measurement{Magnitude: 10.1},
+					DiskQuota:   Measurement{Magnitude: 250.5},
+				},
+			}
+
+			work <- []Message{message1, message2}
 		})
 
 		JustBeforeEach(func() {
@@ -69,28 +78,12 @@ var _ = Describe("emitter", func() {
 
 		It("should forward the first message", func() {
 			message := forwarder.ForwardArgsForCall(0)
-			Expect(message).To(Equal(Message{
-				AppID:       "appid",
-				IndexID:     "0",
-				CPU:         123.4,
-				Memory:      123.4,
-				MemoryQuota: 1000.4,
-				Disk:        10.1,
-				DiskQuota:   250.5,
-			}))
+			Expect(message).To(Equal(message1))
 		})
 
 		It("should forward the second message", func() {
 			message := forwarder.ForwardArgsForCall(1)
-			Expect(message).To(Equal(Message{
-				AppID:       "appid",
-				IndexID:     "1",
-				CPU:         234.1,
-				Memory:      675.4,
-				MemoryQuota: 1000.4,
-				Disk:        10.1,
-				DiskQuota:   250.5,
-			}))
+			Expect(message).To(Equal(message2))
 		})
 	})
 })

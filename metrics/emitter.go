@@ -8,14 +8,20 @@ type Emitter struct {
 	work      <-chan []Message
 }
 
+type Measurement struct {
+	Unit      string
+	Magnitude float64
+}
+
 type Message struct {
-	AppID       string
-	IndexID     string
-	CPU         float64
-	Memory      float64
-	MemoryQuota float64
-	Disk        float64
-	DiskQuota   float64
+	AppID   string
+	IndexID string
+	Metrics map[string]Measurement
+	// CPU         float64
+	// Memory      float64
+	// MemoryQuota float64
+	// Disk        float64
+	// DiskQuota   float64
 }
 
 //go:generate counterfeiter . Forwarder
