@@ -1,6 +1,8 @@
 package statefulsets_test
 
 import (
+	"sync"
+
 	"code.cloudfoundry.org/eirini/k8s"
 	informerroute "code.cloudfoundry.org/eirini/k8s/informers/route"
 	"code.cloudfoundry.org/eirini/opi"
@@ -40,6 +42,12 @@ var _ = Describe("Routes", func() {
 	})
 
 	Context("When creating a StatefulSet", func() {
+		var collector k8s.RouteCollector
+
+		BeforeEach(func() {
+			logger := lagertest.NewTestLogger("test")
+			collector = k8s.NewRouteCollector(clientset, namespace, logger)
+		})
 
 		It("sends register routes message TODO", func() {
 			err := desirer.Desire(odinLRP)
@@ -52,8 +60,6 @@ var _ = Describe("Routes", func() {
 				return podReady(pods[0])
 			}, timeout).Should(BeTrue())
 
-			logger := lagertest.NewTestLogger("test")
-			collector := k8s.NewRouteCollector(clientset, namespace, logger)
 			routes, err := collector.Collect()
 			Expect(err).ToNot(HaveOccurred())
 			pods := listPods(odinLRP.LRPIdentifier)
@@ -79,7 +85,7 @@ var _ = Describe("Routes", func() {
 				odinLRP.Command = []string{
 					"/bin/sh",
 					"-c",
-					`if [ $(echo $HOSTNAME | sed 's|.*-\(.*\)|\1|') -eq 1 ]; then
+					`if [ $(echo $HOSTNAME | sed 's|.*-\(.*\)|\1|') -eq 0 ]; then
 	exit;
 else
 	while true; do
@@ -87,16 +93,40 @@ else
 	done;
 fi;`,
 				}
+				err := desirer.Desire(odinLRP)
+				Expect(err).ToNot(HaveOccurred())
+				Eventually(func() bool {
+					pods := listPods(odinLRP.LRPIdentifier)
+					if len(pods) < 2 {
+						return false
+					}
+					return podCrashed(pods[0]) && podReady(pods[1])
+				}, timeout).Should(BeTrue())
+			})
+
+			It("should only return a register message for the working instance", func() {
+				routes, err := collector.Collect()
+				Expect(err).ToNot(HaveOccurred())
+				pods := listPods(odinLRP.LRPIdentifier)
+				Expect(routes).To(ContainElement(route.Message{
+					InstanceID: pods[1].Name,
+					Name:       odinLRP.GUID,
+					Address:    pods[1].Status.PodIP,
+					Port:       8080,
+					TLSPort:    0,
+					Routes: route.Routes{
+						RegisteredRoutes: []string{"foo.example.com"},
+					},
+				}))
 			})
 		})
 	})
 
-	Context("When deleting a LRP", func() {
-
+	FContext("Informers", func() {
 		var (
-			pods     []corev1.Pod
-			workChan chan *route.Message
-			stopChan chan struct{}
+			workChan   chan *route.Message
+			stopChan   chan struct{}
+			informerWG sync.WaitGroup
 		)
 
 		BeforeEach(func() {
@@ -113,21 +143,89 @@ fi;`,
 
 			stopChan = make(chan struct{})
 			workChan = make(chan *route.Message, 5)
+			informerWG = sync.WaitGroup{}
+			informerWG.Add(1)
 
 			logger := lagertest.NewTestLogger("instance-informer-test")
+			informer := &informerroute.URIChangeInformer{
+				Client:    clientset,
+				Cancel:    stopChan,
+				Namespace: namespace,
+				Logger:    logger,
+			}
+			go func() {
+				informer.Start(workChan)
+				informerWG.Done()
+			}()
+		})
 
+		AfterEach(func() {
+			close(stopChan)
+			informerWG.Wait()
+			close(workChan)
+		})
+
+		When("the app is stopped", func() {
+			It("sends unregister routes message", func() {
+				desirer.Stop(odinLRP.LRPIdentifier)
+				pods := listPods(odinLRP.LRPIdentifier)
+				Eventually(workChan, timeout).Should(Receive(Equal(&route.Message{
+					Routes: route.Routes{
+						UnregisteredRoutes: []string{"foo.example.com"},
+					},
+					InstanceID: pods[1].Name,
+					Name:       odinLRP.GUID,
+					Address:    pods[1].Status.PodIP,
+					Port:       8080,
+					TLSPort:    0,
+				})))
+			})
+
+		})
+	})
+
+	Context("When deleting an LRP", func() {
+		var (
+			pods       []corev1.Pod
+			workChan   chan *route.Message
+			stopChan   chan struct{}
+			informerWG sync.WaitGroup
+		)
+
+		BeforeEach(func() {
+			odinLRP.TargetInstances = 2
+			err := desirer.Desire(odinLRP)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(func() bool {
+				pods := listPods(odinLRP.LRPIdentifier)
+				if len(pods) < 2 {
+					return false
+				}
+				return podReady(pods[0]) && podReady(pods[1])
+			}, timeout).Should(BeTrue())
+
+			stopChan = make(chan struct{})
+			workChan = make(chan *route.Message, 5)
+			informerWG = sync.WaitGroup{}
+			informerWG.Add(1)
+
+			logger := lagertest.NewTestLogger("instance-informer-test")
 			informer := &informerroute.InstanceChangeInformer{
 				Client:    clientset,
 				Cancel:    stopChan,
 				Namespace: namespace,
 				Logger:    logger,
 			}
-
-			go informer.Start(workChan)
+			go func() {
+				informer.Start(workChan)
+				informerWG.Done()
+			}()
 		})
 
 		AfterEach(func() {
 			close(stopChan)
+			informerWG.Wait()
+			close(workChan)
 		})
 
 		Context("when the app is scaled down", func() {
@@ -169,14 +267,13 @@ fi;`,
 			})
 		})
 	})
-
 })
 
-func podReady(pod corev1.Pod) bool {
-	for _, c := range pod.Status.Conditions {
-		if c.Type == corev1.PodReady {
-			return c.Status == corev1.ConditionTrue
-		}
+func podCrashed(pod corev1.Pod) bool {
+	if len(pod.Status.ContainerStatuses) == 0 {
+		return false
 	}
-	return false
+	terminated := pod.Status.ContainerStatuses[0].State.Terminated
+	waiting := pod.Status.ContainerStatuses[0].State.Waiting
+	return terminated != nil || waiting != nil && waiting.Reason == "CrashLoopBackOff"
 }

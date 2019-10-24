@@ -12,6 +12,7 @@ import (
 	"code.cloudfoundry.org/lager/lagertest"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gstruct"
 )
 
 var _ = Describe("Crashes", func() {
@@ -30,7 +31,7 @@ var _ = Describe("Crashes", func() {
 
 	BeforeEach(func() {
 		reportGenerator = event.DefaultCrashReportGenerator{}
-		reportChan = make(chan events.CrashReport)
+		reportChan = make(chan events.CrashReport, 10)
 		informerStopper = make(chan struct{})
 
 		logger = lagertest.NewTestLogger("crash-event-logger-test")
@@ -55,6 +56,7 @@ var _ = Describe("Crashes", func() {
 	AfterEach(func() {
 		close(informerStopper)
 		informerWG.Wait()
+		close(reportChan)
 	})
 
 	Context("When an app crashes", func() {
@@ -65,9 +67,29 @@ var _ = Describe("Crashes", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		FIt("generates crash reports", func() {
-			Eventually(reportChan, timeout).Should(Receive(Equal(events.CrashReport{
-				ProcessGUID: odinLRP.LRPIdentifier.ProcessGUID(),
+		It("generates crash report for the initial error", func() {
+			Eventually(reportChan, timeout).Should(Receive(MatchFields(IgnoreExtras, Fields{
+				"ProcessGUID": Equal(odinLRP.AppName),
+				"AppCrashedRequest": MatchFields(IgnoreExtras, Fields{
+					"Instance":        ContainSubstring(odinLRP.GUID),
+					"Index":           Equal(0),
+					"Reason":          Equal("Error"),
+					"ExitStatus":      Equal(1),
+					"ExitDescription": Equal("Error"),
+				}),
+			})))
+		})
+
+		It("generates crash report when the app goes into CrashLoopBackOff", func() {
+			Eventually(reportChan, timeout).Should(Receive(MatchFields(IgnoreExtras, Fields{
+				"ProcessGUID": Equal(odinLRP.AppName),
+				"AppCrashedRequest": MatchFields(IgnoreExtras, Fields{
+					"Instance":        ContainSubstring(odinLRP.GUID),
+					"Index":           Equal(0),
+					"Reason":          Equal("CrashLoopBackOff"),
+					"ExitStatus":      Equal(1),
+					"ExitDescription": Equal("Error"),
+				}),
 			})))
 		})
 	})

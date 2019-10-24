@@ -215,3 +215,12 @@ func podNamesFromPods(pods []corev1.Pod) []string {
 	}
 	return names
 }
+
+func podReady(pod corev1.Pod) bool {
+	for _, c := range pod.Status.Conditions {
+		if c.Type == corev1.PodReady {
+			return c.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
