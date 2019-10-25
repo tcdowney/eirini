@@ -1,10 +1,13 @@
 package statefulsets_test
 
 import (
+	"encoding/json"
 	"sync"
+	"time"
 
 	"code.cloudfoundry.org/eirini/k8s"
 	informerroute "code.cloudfoundry.org/eirini/k8s/informers/route"
+	"code.cloudfoundry.org/eirini/models/cf"
 	"code.cloudfoundry.org/eirini/opi"
 	"code.cloudfoundry.org/eirini/route"
 	"code.cloudfoundry.org/lager/lagertest"
@@ -49,9 +52,8 @@ var _ = Describe("Routes", func() {
 			collector = k8s.NewRouteCollector(clientset, namespace, logger)
 		})
 
-		It("sends register routes message TODO", func() {
-			err := desirer.Desire(odinLRP)
-			Expect(err).ToNot(HaveOccurred())
+		It("sends register routes message", func() {
+			Expect(desirer.Desire(odinLRP)).To(Succeed())
 			Eventually(func() bool {
 				pods := listPods(odinLRP.LRPIdentifier)
 				if len(pods) < 1 {
@@ -122,7 +124,7 @@ fi;`,
 		})
 	})
 
-	FContext("Informers", func() {
+	Context("Informers", func() {
 		var (
 			workChan   chan *route.Message
 			stopChan   chan struct{}
@@ -130,7 +132,6 @@ fi;`,
 		)
 
 		BeforeEach(func() {
-			odinLRP.TargetInstances = 2
 			err := desirer.Desire(odinLRP)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(func() bool {
@@ -142,7 +143,7 @@ fi;`,
 			}, timeout).Should(BeTrue())
 
 			stopChan = make(chan struct{})
-			workChan = make(chan *route.Message, 5)
+			workChan = make(chan *route.Message, 10)
 			informerWG = sync.WaitGroup{}
 			informerWG.Add(1)
 
@@ -167,20 +168,43 @@ fi;`,
 
 		When("the app is stopped", func() {
 			It("sends unregister routes message", func() {
-				desirer.Stop(odinLRP.LRPIdentifier)
+				Expect(desirer.Stop(odinLRP.LRPIdentifier)).To(Succeed())
 				pods := listPods(odinLRP.LRPIdentifier)
 				Eventually(workChan, timeout).Should(Receive(Equal(&route.Message{
 					Routes: route.Routes{
 						UnregisteredRoutes: []string{"foo.example.com"},
 					},
-					InstanceID: pods[1].Name,
+					InstanceID: pods[0].Name,
 					Name:       odinLRP.GUID,
-					Address:    pods[1].Status.PodIP,
+					Address:    pods[0].Status.PodIP,
 					Port:       8080,
 					TLSPort:    0,
 				})))
 			})
+		})
 
+		When("a new route is registerd for the app", func() {
+			It("should send a regsiter route message with the new route", func() {
+				routes, err := json.Marshal([]cf.Route{
+					{Hostname: "foo.example.com", Port: 8080},
+					{Hostname: "bar.example.com", Port: 9090},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				odinLRP.Metadata[cf.VcapAppUris] = string(routes)
+				Expect(desirer.Update(odinLRP)).To(Succeed())
+				pods := listPods(odinLRP.LRPIdentifier)
+				Eventually(workChan, 15*time.Second).Should(Receive(Equal(&route.Message{
+					Routes: route.Routes{
+						RegisteredRoutes: []string{"bar.example.com"},
+					},
+					InstanceID: pods[0].Name,
+					Name:       odinLRP.GUID,
+					Address:    pods[0].Status.PodIP,
+					Port:       9090,
+					TLSPort:    0,
+				})))
+
+			})
 		})
 	})
 
@@ -194,8 +218,7 @@ fi;`,
 
 		BeforeEach(func() {
 			odinLRP.TargetInstances = 2
-			err := desirer.Desire(odinLRP)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(desirer.Desire(odinLRP)).To(Succeed())
 			Eventually(func() bool {
 				pods := listPods(odinLRP.LRPIdentifier)
 				if len(pods) < 2 {
@@ -232,9 +255,8 @@ fi;`,
 			It("sends unregister routes message", func() {
 				pods = listPods(odinLRP.LRPIdentifier)
 				odinLRP.TargetInstances = 1
-				err := desirer.Update(odinLRP)
+				Expect(desirer.Update(odinLRP)).To(Succeed())
 
-				Expect(err).ToNot(HaveOccurred())
 				Eventually(workChan, timeout).Should(Receive(Equal(&route.Message{
 					Routes: route.Routes{
 						UnregisteredRoutes: []string{"foo.example.com"},
@@ -251,9 +273,8 @@ fi;`,
 		Context("when an app instance is stopped", func() {
 			It("sends unregister routes message", func() {
 				pods = listPods(odinLRP.LRPIdentifier)
-				err := desirer.StopInstance(odinLRP.LRPIdentifier, 0)
+				Expect(desirer.StopInstance(odinLRP.LRPIdentifier, 0)).To(Succeed())
 
-				Expect(err).ToNot(HaveOccurred())
 				Eventually(workChan, timeout).Should(Receive(Equal(&route.Message{
 					Routes: route.Routes{
 						UnregisteredRoutes: []string{"foo.example.com"},
