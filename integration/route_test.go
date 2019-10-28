@@ -44,7 +44,7 @@ var _ = Describe("Routes", func() {
 		)
 	})
 
-	Context("When creating a StatefulSet", func() {
+	Context("RouteCollector", func() {
 		var collector k8s.RouteCollector
 
 		BeforeEach(func() {
@@ -52,68 +52,24 @@ var _ = Describe("Routes", func() {
 			collector = k8s.NewRouteCollector(clientset, namespace, logger)
 		})
 
-		It("sends register routes message", func() {
-			Expect(desirer.Desire(odinLRP)).To(Succeed())
-			Eventually(func() bool {
-				pods := listPods(odinLRP.LRPIdentifier)
-				if len(pods) < 1 {
-					return false
-				}
-				return podReady(pods[0])
-			}, timeout).Should(BeTrue())
-
-			routes, err := collector.Collect()
-			Expect(err).ToNot(HaveOccurred())
-			pods := listPods(odinLRP.LRPIdentifier)
-			Expect(routes).To(ContainElement(route.Message{
-				InstanceID: pods[0].Name,
-				Name:       odinLRP.GUID,
-				Address:    pods[0].Status.PodIP,
-				Port:       8080,
-				TLSPort:    0,
-				Routes: route.Routes{
-					RegisteredRoutes: []string{"foo.example.com"},
-				},
-			}))
-		})
-
-		Context("When one of the instances if failing", func() {
-			BeforeEach(func() {
-				odinLRP = createLRP("odin")
-				odinLRP.Health = opi.Healtcheck{
-					Type: "port",
-					Port: 3000,
-				}
-				odinLRP.Command = []string{
-					"/bin/sh",
-					"-c",
-					`if [ $(echo $HOSTNAME | sed 's|.*-\(.*\)|\1|') -eq 0 ]; then
-	exit;
-else
-	while true; do
-		nc -lk -p 3000 -e echo just a server;
-	done;
-fi;`,
-				}
-				err := desirer.Desire(odinLRP)
-				Expect(err).ToNot(HaveOccurred())
+		When("an LRP is desired", func() {
+			It("sends register routes message", func() {
+				Expect(desirer.Desire(odinLRP)).To(Succeed())
 				Eventually(func() bool {
 					pods := listPods(odinLRP.LRPIdentifier)
-					if len(pods) < 2 {
+					if len(pods) < 1 {
 						return false
 					}
-					return podCrashed(pods[0]) && podReady(pods[1])
+					return podReady(pods[0])
 				}, timeout).Should(BeTrue())
-			})
 
-			It("should only return a register message for the working instance", func() {
 				routes, err := collector.Collect()
 				Expect(err).ToNot(HaveOccurred())
 				pods := listPods(odinLRP.LRPIdentifier)
 				Expect(routes).To(ContainElement(route.Message{
-					InstanceID: pods[1].Name,
+					InstanceID: pods[0].Name,
 					Name:       odinLRP.GUID,
-					Address:    pods[1].Status.PodIP,
+					Address:    pods[0].Status.PodIP,
 					Port:       8080,
 					TLSPort:    0,
 					Routes: route.Routes{
@@ -121,10 +77,56 @@ fi;`,
 					},
 				}))
 			})
+
+			When("one of the instances is failing", func() {
+				BeforeEach(func() {
+					odinLRP = createLRP("odin")
+					odinLRP.Health = opi.Healtcheck{
+						Type: "port",
+						Port: 3000,
+					}
+					odinLRP.Command = []string{
+						"/bin/sh",
+						"-c",
+						`if [ $(echo $HOSTNAME | sed 's|.*-\(.*\)|\1|') -eq 0 ]; then
+	exit;
+else
+	while true; do
+		nc -lk -p 3000 -e echo just a server;
+	done;
+fi;`,
+					}
+					err := desirer.Desire(odinLRP)
+					Expect(err).ToNot(HaveOccurred())
+					Eventually(func() bool {
+						pods := listPods(odinLRP.LRPIdentifier)
+						if len(pods) < 2 {
+							return false
+						}
+						return podCrashed(pods[0]) && podReady(pods[1])
+					}, timeout).Should(BeTrue())
+				})
+
+				It("should only return a register message for the working instance", func() {
+					routes, err := collector.Collect()
+					Expect(err).ToNot(HaveOccurred())
+					pods := listPods(odinLRP.LRPIdentifier)
+					Expect(routes).To(ContainElement(route.Message{
+						InstanceID: pods[1].Name,
+						Name:       odinLRP.GUID,
+						Address:    pods[1].Status.PodIP,
+						Port:       8080,
+						TLSPort:    0,
+						Routes: route.Routes{
+							RegisteredRoutes: []string{"foo.example.com"},
+						},
+					}))
+				})
+			})
 		})
 	})
 
-	Context("Informers", func() {
+	Context("InstanceInformer", func() {
 		var (
 			workChan   chan *route.Message
 			stopChan   chan struct{}
@@ -166,7 +168,7 @@ fi;`,
 			close(workChan)
 		})
 
-		When("the app is stopped", func() {
+		When("ann app is stopped", func() {
 			It("sends unregister routes message", func() {
 				Expect(desirer.Stop(odinLRP.LRPIdentifier)).To(Succeed())
 				pods := listPods(odinLRP.LRPIdentifier)
@@ -183,7 +185,7 @@ fi;`,
 			})
 		})
 
-		When("a new route is registerd for the app", func() {
+		When("a new route is registerd for an app", func() {
 			It("should send a regsiter route message with the new route", func() {
 				routes, err := json.Marshal([]cf.Route{
 					{Hostname: "foo.example.com", Port: 8080},
@@ -208,7 +210,7 @@ fi;`,
 		})
 	})
 
-	Context("When deleting an LRP", func() {
+	Context("URIChangeInformer", func() {
 		var (
 			pods       []corev1.Pod
 			workChan   chan *route.Message
@@ -251,7 +253,7 @@ fi;`,
 			close(workChan)
 		})
 
-		Context("when the app is scaled down", func() {
+		When("the app is scaled down", func() {
 			It("sends unregister routes message", func() {
 				pods = listPods(odinLRP.LRPIdentifier)
 				odinLRP.TargetInstances = 1
@@ -270,7 +272,7 @@ fi;`,
 			})
 		})
 
-		Context("when an app instance is stopped", func() {
+		When("an app instance is stopped", func() {
 			It("sends unregister routes message", func() {
 				pods = listPods(odinLRP.LRPIdentifier)
 				Expect(desirer.StopInstance(odinLRP.LRPIdentifier, 0)).To(Succeed())
@@ -289,12 +291,3 @@ fi;`,
 		})
 	})
 })
-
-func podCrashed(pod corev1.Pod) bool {
-	if len(pod.Status.ContainerStatuses) == 0 {
-		return false
-	}
-	terminated := pod.Status.ContainerStatuses[0].State.Terminated
-	waiting := pod.Status.ContainerStatuses[0].State.Waiting
-	return terminated != nil || waiting != nil && waiting.Reason == "CrashLoopBackOff"
-}
