@@ -152,6 +152,58 @@ var _ = Describe("PodState", func() {
 			Expect(GetPodState(pod)).To(Equal(opi.RunningState))
 		})
 	})
+	When("the pod has multiple containers", func() {
+		When("NOT all container states are Running and Ready", func() {
+			It("should return 'HMM' State", func() {
+				pod := corev1.Pod{
+					Status: corev1.PodStatus{
+						ContainerStatuses: []corev1.ContainerStatus{
+							{
+								State: corev1.ContainerState{
+									Running: &corev1.ContainerStateRunning{},
+								},
+								Ready: true,
+							},
+							{
+								State: corev1.ContainerState{
+									Running: &corev1.ContainerStateRunning{},
+								},
+								Ready: false,
+							},
+						},
+						Phase: corev1.PodFailed,
+					},
+				}
+				Expect(GetPodState(pod)).To(Equal(opi.PendingState))
+			})
+		})
+
+		When("all container states are Running and Ready", func() {
+			It("should return 'RUNNING' State", func() {
+				pod := corev1.Pod{
+					Status: corev1.PodStatus{
+						ContainerStatuses: []corev1.ContainerStatus{
+							{
+								State: corev1.ContainerState{
+									Running: &corev1.ContainerStateRunning{},
+								},
+								Ready: true,
+							},
+							{
+								State: corev1.ContainerState{
+									Running: &corev1.ContainerStateRunning{},
+								},
+								Ready: true,
+							},
+						},
+						Phase: corev1.PodFailed,
+					},
+				}
+				Expect(GetPodState(pod)).To(Equal(opi.RunningState))
+			})
+		})
+	})
+
 
 	When("the pod state cannot be determined", func() {
 		It("should return 'UNKNOWN' State", func() {

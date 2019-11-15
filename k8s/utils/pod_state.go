@@ -25,7 +25,7 @@ func GetPodState(pod corev1.Pod) string {
 		return opi.CrashedState
 	}
 
-	if podRunning(pod.Status.ContainerStatuses[0]) {
+	if allPodsRunning(pod.Status.ContainerStatuses) {
 		return opi.RunningState
 	}
 
@@ -41,8 +41,13 @@ func podPending(pod *corev1.Pod) bool {
 	return pod.Status.Phase == corev1.PodPending
 }
 func podNotReady(pod *corev1.Pod) bool {
-	status := pod.Status.ContainerStatuses[0]
-	return (status.State.Running != nil && !status.Ready)
+	for _, status := range pod.Status.ContainerStatuses {
+		if (status.State.Running != nil && !status.Ready) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func podCrashed(status corev1.ContainerStatus) bool {
@@ -51,4 +56,14 @@ func podCrashed(status corev1.ContainerStatus) bool {
 
 func podRunning(status corev1.ContainerStatus) bool {
 	return status.State.Running != nil && status.Ready
+}
+
+func allPodsRunning(statuses []corev1.ContainerStatus) bool {
+	for _, status := range statuses {
+		if !podRunning(status) {
+			return false
+		}
+	}
+
+	return true
 }
